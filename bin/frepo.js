@@ -1,101 +1,125 @@
 #!/usr/bin/env node
 
-import axios from "axios";
-import inquirer from "inquirer";
 import chalk from "chalk";
-import open from "open";
-import dotenv from "dotenv";
-import express from "express";
-import fs from "fs";
-import path from "path";
-import os from "os";
+import inquirer from "inquirer";
+import user from "../src/model/user.js";
+import createRepo from "../src/commands/create.js";
+import deleteRepo from "../src/commands/delete.js";
 
-dotenv.config();
-
-const CLIENT_ID = process.env.GITHUB_CLIENT_ID;
-const CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET;
-const TOKEN_PATH = path.join(os.homedir(), ".frepo_token");
-
-const getStoredToken = () => {
-  if (fs.existsSync(TOKEN_PATH)) {
-    return fs.readFileSync(TOKEN_PATH, "utf8").trim();
-  }
-  return null;
+const showHelp = () => {
+  console.log(chalk.blue("Usage: frepo <command> [options]"));
+  console.log(chalk.green("\nAvailable commands:\n"));
+  console.log(
+    chalk.yellow("  frepo auth        ") + "Authenticate with GitHub"
+  );
+  console.log(
+    chalk.yellow('  frepo new "<repo>" ') + "Create a new GitHub repository"
+  );
+  console.log(
+    chalk.yellow('  frepo del "<repo>" ') + "Delete an empty GitHub repository"
+  );
+  console.log(chalk.yellow("  frepo --help      ") + "Show this help menu");
 };
 
-const storeToken = (token) => {
-  fs.writeFileSync(TOKEN_PATH, token, "utf8");
-};
-
-const authenticate = async () => {
-  return new Promise((resolve, reject) => {
-    const app = express();
-    const server = app.listen(3000, () => console.log(chalk.blue("Waiting for GitHub authentication...")));
-
-    app.get("/callback", async (req, res) => {
-      const { code } = req.query;
-      if (!code) {
-        res.send("No code received.");
-        return reject("GitHub authentication failed.");
-      }
-
-      try {
-        const response = await axios.post(
-          "https://github.com/login/oauth/access_token",
-          {
-            client_id: CLIENT_ID,
-            client_secret: CLIENT_SECRET,
-            code,
-          },
-          { headers: { Accept: "application/json" } }
-        );
-
-        const token = response.data.access_token;
-        storeToken(token);
-
-        res.send("Authentication successful! You can close this tab.");
-        server.close();
-        resolve(token);
-      } catch (error) {
-        reject(error);
-      }
-    });
-
-    open(`https://github.com/login/oauth/authorize?client_id=${CLIENT_ID}&scope=repo`);
-  });
-};
-
-const createRepo = async (repoName, token) => {
+const promptUser = async (questions) => {
   try {
-    const response = await axios.post(
-      "https://api.github.com/user/repos",
-      { name: repoName },
-      { headers: { Authorization: `token ${token}` } }
-    );
-
-    console.log(chalk.green(`Repository created: ${response.data.html_url}`));
+    return await inquirer.prompt(questions);
   } catch (error) {
-    console.error(chalk.red("Error creating repository:", error.response?.data?.message || error.message));
+    if (error.isTtyError) {
+      console.log(
+        chalk.red("❌ Prompt could not be rendered in the current environment.")
+      );
+    } else {
+      console.log(chalk.yellow("⚠️ Operation canceled."));
+    }
+    process.exit(0);
   }
 };
 
 const main = async () => {
   const args = process.argv.slice(2);
-  if (args.length < 2 || args[0] !== "new") {
-    console.log(chalk.red("Usage: frepo new <repo-name>"));
-    process.exit(1);
+
+  if (args.length === 0) {
+    const { action } = await promptUser([
+      {
+        type: "list",
+        name: "action",
+        message: "What would you like to do?",
+        choices: [
+          { name: "Create a new repository", value: "new" },
+          { name: "Authenticate GitHub", value: "auth" },
+          { name: "Delete a repository", value: "del" },
+          { name: "Exit", value: "exit" },
+        ],
+      },
+    ]);
+
+    if (action === "exit") process.exit(0);
+    args.push(action);
   }
 
-  const repoName = args[1];
-  let token = getStoredToken();
+  switch (args[0]) {
+    case "--help":
+      showHelp();
+      break;
 
-  if (!token) {
-    console.log(chalk.yellow("No GitHub token found. Authenticating..."));
-    token = await authenticate();
+    case "auth":
+      await user.authenticate();
+      console.log(chalk.green("✅ Authentication successful!"));
+      break;
+
+    case "new":
+      let repoName = args[1];
+
+      if (!repoName) {
+        const { name } = await promptUser([
+          {
+            type: "input",
+            name: "name",
+            message: "Enter the repository name:",
+          },
+        ]);
+        repoName = name;
+      }
+
+      await createRepo(repoName);
+      break;
+
+    case "del":
+      let deleteRepoName = args[1];
+      const autoConfirm = args.includes("-y");
+
+      if (!deleteRepoName) {
+        const { name } = await promptUser([
+          {
+            type: "input",
+            name: "name",
+            message: "Enter the repository name to delete:",
+          },
+        ]);
+        if (!name) {
+          console.log(
+            chalk.red("❌ Please provide a repository name to delete.")
+          );
+          process.exit(1);
+        }
+        deleteRepoName = name;
+      }
+
+      await deleteRepo(deleteRepoName, autoConfirm);
+      break;
+
+    default:
+      console.log(
+        chalk.red(
+          "❌ Unknown command! Use 'frepo --help' for usage instructions."
+        )
+      );
+      process.exit(1);
   }
-
-  await createRepo(repoName, token);
 };
 
-main();
-
+main().catch(() => {
+  console.log(chalk.yellow("⚠️ Operation canceled."));
+  process.exit(0);
+});
