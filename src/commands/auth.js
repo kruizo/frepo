@@ -11,12 +11,9 @@ const CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET;
 
 export const authenticate = async () => {
   if (!process.env.GITHUB_CLIENT_ID || !process.env.GITHUB_CLIENT_SECRET) {
-    console.log(
-      chalk.red(
-        "❌ Missing GitHub Client ID or Secret. Please check your environment variables."
-      )
+    throw new Error(
+      "Missing GitHub Client ID or Secret. Please check your environment variables."
     );
-    return;
   }
 
   return new Promise((resolve, reject) => {

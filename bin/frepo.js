@@ -64,8 +64,13 @@ const main = async () => {
       break;
 
     case "auth":
-      await user.authenticate();
-      console.log(chalk.green("✅ Authentication successful!"));
+      try {
+        await user.authenticate();
+        console.log(chalk.green("✅ Authentication successful!"));
+      } catch (error) {
+        console.log(chalk.red(`❌ ${error}`));
+        process.exit(1);
+      }
       break;
 
     case "new":
