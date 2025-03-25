@@ -2,9 +2,14 @@
 
 import chalk from "chalk";
 import inquirer from "inquirer";
-import user from "../src/model/user.js";
 import createRepo from "../src/commands/create.js";
 import deleteRepo from "../src/commands/delete.js";
+import { authenticateUser, logoutUser } from "../src/commands/auth.js";
+import listRepos from "../src/commands/list.js";
+import dotenv from "dotenv";
+import { isStoredTokenExist } from "../src/utils/token.js";
+
+dotenv.config();
 
 const showHelp = () => {
   console.log(chalk.blue("Usage: frepo <command> [options]"));
@@ -12,6 +17,7 @@ const showHelp = () => {
   console.log(
     chalk.yellow("  frepo auth        ") + "Authenticate with GitHub"
   );
+  console.log(chalk.yellow("  frepo list        ") + "Shows your repo list");
   console.log(
     chalk.yellow('  frepo new "<repo>" ') + "Create a new GitHub repository"
   );
@@ -36,6 +42,27 @@ const promptUser = async (questions) => {
   }
 };
 
+const ensureAuthenticated = async () => {
+  if (!isStoredTokenExist()) {
+    console.log(
+      chalk.yellow(
+        "⚠️  🔑 No access token not found. Please run 'frepo auth' first."
+      )
+    );
+    process.exit(1);
+  }
+};
+
+const checkEnvironmentVariables = async () => {
+  if (!isStoredTokenExist()) {
+    console.log(
+      chalk.yellow(
+        "⚠️  Missing GitHub Client ID or Secret. Please check your environment variables."
+      )
+    );
+    process.exit(1);
+  }
+};
 const main = async () => {
   const args = process.argv.slice(2);
 
@@ -48,6 +75,7 @@ const main = async () => {
         choices: [
           { name: "Create a new repository", value: "new" },
           { name: "Authenticate GitHub", value: "auth" },
+          { name: "Show Repository List", value: "list" },
           { name: "Delete a repository", value: "del" },
           { name: "Exit", value: "exit" },
         ],
@@ -58,6 +86,8 @@ const main = async () => {
     args.push(action);
   }
 
+  // checkEnvironmentVariables();
+
   switch (args[0]) {
     case "--help":
       showHelp();
@@ -65,15 +95,18 @@ const main = async () => {
 
     case "auth":
       try {
-        await user.authenticate();
-        console.log(chalk.green("✅ Authentication successful!"));
+        await authenticateUser();
       } catch (error) {
-        console.log(chalk.red(`❌ ${error}`));
+        console.log(chalk.yellow(`⚠️  ${error}`));
         process.exit(1);
       }
       break;
-
+    case "list":
+      ensureAuthenticated();
+      await listRepos();
+      break;
     case "new":
+      ensureAuthenticated();
       let repoName = args[1];
 
       if (!repoName) {
@@ -91,6 +124,8 @@ const main = async () => {
       break;
 
     case "del":
+      ensureAuthenticated();
+
       let deleteRepoName = args[1];
       const autoConfirm = args.includes("-y");
 
@@ -113,6 +148,12 @@ const main = async () => {
 
       await deleteRepo(deleteRepoName, autoConfirm);
       break;
+    case "logout":
+      ensureAuthenticated();
+
+      logoutUser();
+
+      break;
 
     default:
       console.log(
@@ -124,7 +165,7 @@ const main = async () => {
   }
 };
 
-main().catch(() => {
-  console.log(chalk.yellow("⚠️ Operation canceled."));
+main().catch((e) => {
+  console.log(chalk.yellow("⚠️ Operation canceled.", e));
   process.exit(0);
 });

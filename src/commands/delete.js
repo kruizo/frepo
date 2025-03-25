@@ -1,11 +1,12 @@
 import axios from "axios";
 import chalk from "chalk";
 import inquirer from "inquirer";
-import user from "../model/user.js";
+import dotenv from "dotenv";
+import { getStoredToken } from "../utils/token.js";
+dotenv.config();
 
 const deleteRepo = async (repoName, autoConfirm = false) => {
-  await user.authenticate();
-  const username = await user.getUsername();
+  const { TOKEN, USERNAME } = getStoredToken();
 
   if (!autoConfirm) {
     const answer = await inquirer.prompt([
@@ -24,9 +25,10 @@ const deleteRepo = async (repoName, autoConfirm = false) => {
   }
 
   try {
-    const repoUrl = `https://api.github.com/repos/${username}/${repoName}`;
+    const repoUrl = `https://api.github.com/repos/${USERNAME}/${repoName}`;
+    console.log("Deleting repository...");
     const repoResponse = await axios.get(repoUrl, {
-      headers: { Authorization: `token ${user.token}` },
+      headers: { Authorization: `token ${TOKEN}` },
     });
 
     if (repoResponse.data.private) {
@@ -36,7 +38,7 @@ const deleteRepo = async (repoName, autoConfirm = false) => {
     }
 
     const branchesResponse = await axios.get(`${repoUrl}/branches`, {
-      headers: { Authorization: `token ${user.token}` },
+      headers: { Authorization: `token ${TOKEN}` },
     });
 
     if (branchesResponse.data.length > 1) {
@@ -46,10 +48,8 @@ const deleteRepo = async (repoName, autoConfirm = false) => {
       return;
     }
 
-    // If the `-y` flag is passed, skip confirmation
-
     await axios.delete(repoUrl, {
-      headers: { Authorization: `token ${user.token}` },
+      headers: { Authorization: `token ${TOKEN}` },
     });
 
     console.log(

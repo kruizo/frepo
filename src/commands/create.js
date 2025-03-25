@@ -1,15 +1,15 @@
 import axios from "axios";
 import chalk from "chalk";
-import user from "../model/user.js";
+import dotenv from "dotenv";
+import { getStoredToken } from "../utils/token.js";
+dotenv.config();
 
 export default async function createRepo(repo_name) {
-  await user.authenticate();
-  const username = await user.getUsername();
-  const repoUrl = `https://api.github.com/repos/${username}/${repo_name}`;
+  const { TOKEN, USERNAME } = getStoredToken();
 
   try {
-    await axios.get(repoUrl, {
-      headers: { Authorization: `token ${user.token}` },
+    await axios.get(`https://api.github.com/repos/${USERNAME}/${repo_name}`, {
+      headers: { Authorization: `token ${TOKEN}` },
     });
 
     console.log(
@@ -32,11 +32,11 @@ export default async function createRepo(repo_name) {
   }
 
   try {
-    console.log(chalk.blue("Creating repository..."));
+    console.log("Creating repository...");
     const response = await axios.post(
       "https://api.github.com/user/repos",
       { name: repo_name },
-      { headers: { Authorization: `token ${user.token}` } }
+      { headers: { Authorization: `token ${TOKEN}` } }
     );
 
     console.log(
